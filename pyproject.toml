@@ -1,7 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "open-in-proflie"
+name = "aws-sso-wrapper"
 version = "0.1.0"
-description = "Add your description here"
+description = "AWS SSO login wrapper that opens in a specific Chrome profile"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "basedpyright>=1.21.0",
+]
+
+[project.scripts]
+aws-sso-wrapper = "aws_sso_wrapper:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aws_sso_wrapper"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "C4", "DTZ", "PIE", "PT", "RSE", "RET", "SIM", "ARG", "PTH", "PL", "RUF"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+pythonVersion = "3.10"
+reportMissingTypeStubs = false
