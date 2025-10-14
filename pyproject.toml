@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "AWS SSO login wrapper that opens in a specific Chrome profile"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "click>=8.1.0",
 ]
@@ -27,7 +27,7 @@ packages = ["aws_sso_wrapper"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "A", "C4", "DTZ", "PIE", "PT", "RSE", "RET", "SIM", "ARG", "PTH", "PL", "RUF"]
@@ -35,5 +35,5 @@ ignore = ["E501"]  # Line too long (handled by formatter)
 
 [tool.basedpyright]
 typeCheckingMode = "standard"
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 reportMissingTypeStubs = false

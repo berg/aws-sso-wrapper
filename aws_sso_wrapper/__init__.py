@@ -66,16 +66,8 @@ def find_chrome_profile(identifier: str) -> str | None:
 
 
 def get_aws_sso_cache_dir() -> Path:
-    """Get the AWS SSO cache directory, respecting environment variables."""
-    # Check for AWS_SSO_CACHE_PATH (custom)
-    if sso_cache_path := os.environ.get('AWS_SSO_CACHE_PATH'):
-        return Path(sso_cache_path) / "cache"
-
-    # Check for AWS_CLI_CACHE_DIR
-    if cli_cache_dir := os.environ.get('AWS_CLI_CACHE_DIR'):
-        return Path(cli_cache_dir) / "sso" / "cache"
-
-    # Default to ~/.aws/sso/cache
+    """Get the AWS SSO cache directory."""
+    # AWS CLI hardcodes this path - there's no environment variable to override it
     return Path.home() / ".aws/sso/cache"
 
 
@@ -93,6 +85,7 @@ def check_sso_credentials_valid() -> bool:
     cache_dir = get_aws_sso_cache_dir()
 
     if not cache_dir.exists():
+        click.echo(f"Cache directory does not exist: {cache_dir}", err=True)
         return False
 
     now = datetime.now(UTC)
@@ -102,35 +95,47 @@ def check_sso_credentials_valid() -> bool:
         try:
             with cache_file.open() as f:
                 cache_data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            # Can't read or parse this file, skip it
+            click.echo(f"Error reading cache file {cache_file}: {e}", err=True)
+            continue
 
-            # Check for accessToken (SSO token cache)
-            if 'accessToken' in cache_data:
-                expires_at = cache_data.get('expiresAt')
-                if expires_at:
+        # Check for accessToken (SSO token cache)
+        if 'accessToken' in cache_data:
+            expires_at = cache_data.get('expiresAt')
+            if expires_at:
+                try:
                     # Parse ISO format timestamp (e.g., "2024-01-15T12:00:00UTC")
                     expires_dt = datetime.fromisoformat(expires_at.rstrip('Z').rstrip('UTC'))
                     if expires_dt.tzinfo is None:
                         expires_dt = expires_dt.replace(tzinfo=UTC)
 
                     if expires_dt > now:
+                        click.echo(f"Found valid accessToken in {cache_file}", err=True)
                         return True
+                except (ValueError, AttributeError) as e:
+                    # Invalid timestamp format, skip this entry
+                    click.echo(f"Error parsing accessToken expiration in {cache_file}: {e}", err=True)
 
-            # Check for Credentials (role credential cache)
-            if 'Credentials' in cache_data:
-                creds = cache_data['Credentials']
-                expiration = creds.get('Expiration')
-                if expiration:
+        # Check for Credentials (role credential cache)
+        if 'Credentials' in cache_data:
+            creds = cache_data['Credentials']
+            expiration = creds.get('Expiration')
+            if expiration:
+                try:
                     # Parse ISO format timestamp
                     exp_dt = datetime.fromisoformat(expiration.rstrip('Z'))
                     if exp_dt.tzinfo is None:
                         exp_dt = exp_dt.replace(tzinfo=UTC)
 
                     if exp_dt > now:
+                        click.echo(f"Found valid Credentials in {cache_file}", err=True)
                         return True
+                except (ValueError, AttributeError) as e:
+                    # Invalid timestamp format, skip this entry
+                    click.echo(f"Error parsing Credentials expiration in {cache_file}: {e}", err=True)
 
-        except (json.JSONDecodeError, ValueError, KeyError, OSError):
-            continue
-
+    click.echo("No valid credentials found in cache", err=True)
     return False
 
 

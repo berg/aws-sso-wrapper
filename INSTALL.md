@@ -62,11 +62,9 @@ export CHROME_PROFILE_IDENTIFIER="your-email@example.com"
 # or by domain
 export CHROME_PROFILE_IDENTIFIER="example.com"
 
-# Optional: Override AWS paths
+# Optional: Override AWS config/profile
 export AWS_CONFIG_FILE="$HOME/.aws/config"
 export AWS_PROFILE="my-profile"
-export AWS_SSO_CACHE_PATH="$HOME/.aws/sso"
-export AWS_CLI_CACHE_DIR="$HOME/.aws/cli"
 ```
 
 ## Usage Examples
