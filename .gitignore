@@ -1,0 +1,30 @@
+# Python specific
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+venv/
+.venv/
+env/
+
+# Editor/IDE specific
+.vscode/
+.idea/
+
+# Operating System specific
+.DS_Store
+
+# Temporary files
+*.tmp
+*~
+
+# Log files
+*.log
+
+# Environment variables
+.env
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
