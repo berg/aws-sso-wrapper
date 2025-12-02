@@ -31,7 +31,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "A", "C4", "DTZ", "PIE", "PT", "RSE", "RET", "SIM", "ARG", "PTH", "PL", "RUF"]
-ignore = ["E501"]  # Line too long (handled by formatter)
+ignore = ["E501", "PLW0603"]  # E501: Line too long, PLW0603: Global statement usage
 
 [tool.basedpyright]
 typeCheckingMode = "standard"

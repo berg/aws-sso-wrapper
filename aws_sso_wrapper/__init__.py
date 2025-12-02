@@ -13,6 +13,9 @@ from pathlib import Path
 
 import click
 
+# Global flag to control logging output
+_silent = False
+
 
 def find_chrome_profile(identifier: str) -> str | None:
     """
@@ -71,6 +74,59 @@ def get_aws_sso_cache_dir() -> Path:
     return Path.home() / ".aws/sso/cache"
 
 
+def log(message: str) -> None:
+    """Helper to conditionally log messages to stderr."""
+    if not _silent:
+        click.echo(message, err=True)
+
+
+def _check_access_token(cache_data: dict, now: datetime, cache_file: Path) -> bool:
+    """Check if cache data contains a valid access token."""
+    if 'accessToken' not in cache_data:
+        return False
+
+    expires_at = cache_data.get('expiresAt')
+    if not expires_at:
+        return False
+
+    try:
+        expires_dt = datetime.fromisoformat(expires_at.rstrip('Z').rstrip('UTC'))
+        if expires_dt.tzinfo is None:
+            expires_dt = expires_dt.replace(tzinfo=UTC)
+
+        if expires_dt > now:
+            log(f"Found valid accessToken in {cache_file}")
+            return True
+    except (ValueError, AttributeError) as e:
+        log(f"Error parsing accessToken expiration in {cache_file}: {e}")
+
+    return False
+
+
+def _check_credentials(cache_data: dict, now: datetime, cache_file: Path) -> bool:
+    """Check if cache data contains valid credentials."""
+    if 'Credentials' not in cache_data:
+        return False
+
+    creds = cache_data['Credentials']
+    expiration = creds.get('Expiration')
+    if not expiration:
+        return False
+
+    try:
+        exp_dt = datetime.fromisoformat(expiration.rstrip('Z'))
+        if exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=UTC)
+
+        if exp_dt > now:
+            log(f"Found valid Credentials in {cache_file}")
+            return True
+    except (ValueError, AttributeError) as e:
+        log(f"Error parsing Credentials expiration in {cache_file}: {e}")
+
+    return False
+
+
 def check_sso_credentials_valid() -> bool:
     """
     Check if current AWS SSO credentials are valid by checking cache files.
@@ -85,7 +141,7 @@ def check_sso_credentials_valid() -> bool:
     cache_dir = get_aws_sso_cache_dir()
 
     if not cache_dir.exists():
-        click.echo(f"Cache directory does not exist: {cache_dir}", err=True)
+        log(f"Cache directory does not exist: {cache_dir}")
         return False
 
     now = datetime.now(UTC)
@@ -97,45 +153,16 @@ def check_sso_credentials_valid() -> bool:
                 cache_data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             # Can't read or parse this file, skip it
-            click.echo(f"Error reading cache file {cache_file}: {e}", err=True)
+            log(f"Error reading cache file {cache_file}: {e}")
             continue
 
-        # Check for accessToken (SSO token cache)
-        if 'accessToken' in cache_data:
-            expires_at = cache_data.get('expiresAt')
-            if expires_at:
-                try:
-                    # Parse ISO format timestamp (e.g., "2024-01-15T12:00:00UTC")
-                    expires_dt = datetime.fromisoformat(expires_at.rstrip('Z').rstrip('UTC'))
-                    if expires_dt.tzinfo is None:
-                        expires_dt = expires_dt.replace(tzinfo=UTC)
+        # Check for valid access token or credentials
+        if _check_access_token(cache_data, now, cache_file):
+            return True
+        if _check_credentials(cache_data, now, cache_file):
+            return True
 
-                    if expires_dt > now:
-                        click.echo(f"Found valid accessToken in {cache_file}", err=True)
-                        return True
-                except (ValueError, AttributeError) as e:
-                    # Invalid timestamp format, skip this entry
-                    click.echo(f"Error parsing accessToken expiration in {cache_file}: {e}", err=True)
-
-        # Check for Credentials (role credential cache)
-        if 'Credentials' in cache_data:
-            creds = cache_data['Credentials']
-            expiration = creds.get('Expiration')
-            if expiration:
-                try:
-                    # Parse ISO format timestamp
-                    exp_dt = datetime.fromisoformat(expiration.rstrip('Z'))
-                    if exp_dt.tzinfo is None:
-                        exp_dt = exp_dt.replace(tzinfo=UTC)
-
-                    if exp_dt > now:
-                        click.echo(f"Found valid Credentials in {cache_file}", err=True)
-                        return True
-                except (ValueError, AttributeError) as e:
-                    # Invalid timestamp format, skip this entry
-                    click.echo(f"Error parsing Credentials expiration in {cache_file}: {e}", err=True)
-
-    click.echo("No valid credentials found in cache", err=True)
+    log("No valid credentials found in cache")
     return False
 
 
@@ -337,9 +364,11 @@ def ensure_sso_login(profile_name: str | None = None):
         perform_sso_login(profile_name)
 
 
-@click.command()
-@click.argument('command', nargs=-1, required=True)
-def main(command):
+@click.command(context_settings={'help_option_names': ['--help']})
+@click.argument('command', nargs=-1, required=False)
+@click.option('--silent', is_flag=True, help='Suppress all output to stdout')
+@click.option('--test', is_flag=True, help='Test if credentials are available (exit 0) or not (exit 1)')
+def main(command, silent, test):
     """
     AWS SSO login wrapper that opens in a specific Chrome profile.
 
@@ -347,6 +376,17 @@ def main(command):
 
     Example: aws-sso-wrapper -- aws sts get-caller-identity
     """
+    # Set global silent flag
+    global _silent
+    _silent = silent or test
+
+    # Handle --test flag
+    if test:
+        if check_sso_credentials_valid():
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
     # Get Chrome profile from environment variable
     profile_identifier = os.environ.get('CHROME_PROFILE_IDENTIFIER')
 
@@ -354,15 +394,25 @@ def main(command):
     if profile_identifier:
         profile_name = find_chrome_profile(profile_identifier)
 
+    # If no command provided and not silent, print help hint
+    if not command:
+        if not silent:
+            click.echo("Use --help for usage information")
+        sys.exit(0)
+
     # Ensure SSO credentials are valid
     ensure_sso_login(profile_name)
 
+    # Redirect stdout to devnull if silent mode is enabled
+    stdout_target = subprocess.DEVNULL if silent else None
+
     # Execute the wrapped command
     try:
-        result = subprocess.run(command, check=False)
+        result = subprocess.run(command, check=False, stdout=stdout_target)
         sys.exit(result.returncode)
     except FileNotFoundError:
-        click.echo(f"Error: Command '{command[0]}' not found", err=True)
+        if not silent:
+            click.echo(f"Error: Command '{command[0]}' not found", err=True)
         sys.exit(1)
 
 
