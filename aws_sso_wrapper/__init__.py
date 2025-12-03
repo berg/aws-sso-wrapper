@@ -311,7 +311,7 @@ def perform_sso_login(profile_name: str | None = None):
     aws_config.get('sso_region', 'us-east-1')
 
     if not sso_start_url:
-        click.echo("Error: No SSO start URL found in AWS config", err=True)
+        log("Error: No SSO start URL found in AWS config")
         sys.exit(1)
 
     # Set up environment to run aws sso login
@@ -346,10 +346,10 @@ def perform_sso_login(profile_name: str | None = None):
                 sys.exit(1)
 
     except FileNotFoundError:
-        click.echo("Error: 'aws' CLI not found", err=True)
+        log("Error: 'aws' CLI not found")
         sys.exit(1)
     except Exception as e:
-        click.echo(f"Error during SSO login: {e}", err=True)
+        log(f"Error during SSO login: {e}")
         sys.exit(1)
 
 
@@ -394,14 +394,13 @@ def main(command, silent, test):
     if profile_identifier:
         profile_name = find_chrome_profile(profile_identifier)
 
-    # If no command provided and not silent, print help hint
-    if not command:
-        if not silent:
-            click.echo("Use --help for usage information")
-        sys.exit(0)
-
     # Ensure SSO credentials are valid
     ensure_sso_login(profile_name)
+
+    # If no command provided, print help hint and exit
+    if not command:
+        log("Use --help for usage information")
+        sys.exit(0)
 
     # Redirect stdout to devnull if silent mode is enabled
     stdout_target = subprocess.DEVNULL if silent else None
@@ -411,8 +410,7 @@ def main(command, silent, test):
         result = subprocess.run(command, check=False, stdout=stdout_target)
         sys.exit(result.returncode)
     except FileNotFoundError:
-        if not silent:
-            click.echo(f"Error: Command '{command[0]}' not found", err=True)
+        log(f"Error: Command '{command[0]}' not found")
         sys.exit(1)
 
 
